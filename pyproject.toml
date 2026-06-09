@@ -1,0 +1,18 @@
+# Data dependencies ONLY. The skill's "LLM" is your Claude Code host agent + its
+# subagents; there is intentionally NO claude-agent-sdk and NO LLM client here.
+# The scripts under scripts/ are pure data/parse/IO and never import an SDK or call a model.
+[project]
+name = "trading-analysis-skill"
+version = "0.1.0"
+description = "Self-contained data layer for the trading-analysis Claude Code skill (yfinance-based)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "yfinance>=0.2.40",
+    "pandas>=2.0",
+    "stockstats>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/0-Captain/trading-analysis-skill"

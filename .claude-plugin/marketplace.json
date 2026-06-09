@@ -1,0 +1,14 @@
+{
+  "name": "trading-analysis-skill",
+  "owner": {
+    "name": "0-Captain",
+    "url": "https://github.com/0-Captain"
+  },
+  "plugins": [
+    {
+      "name": "trading-analysis",
+      "source": "./",
+      "description": "Multi-agent single-stock analysis pipeline (4 analysts + bull/bear + 3-way risk + research manager + trader + portfolio manager) as a Claude Code skill. Runs on your Claude subscription via subagents; scripts are pure yfinance data/IO with no LLM calls."
+    }
+  ]
+}

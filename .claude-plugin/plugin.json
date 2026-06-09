@@ -1,0 +1,11 @@
+{
+  "name": "trading-analysis",
+  "version": "0.1.0",
+  "description": "Multi-agent single-stock analysis pipeline that runs on your Claude subscription via subagents. Returns BUY/SELL/HOLD with entry tranches, stop, hedge, sizing, price target, and time horizon. Bundled scripts are pure yfinance data/IO — no LLM API key, no Claude Agent SDK.",
+  "author": {
+    "name": "lumingjun",
+    "url": "https://github.com/0-Captain"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/0-Captain/trading-analysis-skill"
+}
