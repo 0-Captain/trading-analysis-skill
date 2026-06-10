@@ -1,9 +1,12 @@
 # trading-analysis-skill
 
-A **multi-agent single-stock analysis pipeline as a Claude Code skill** — it runs
-entirely on **your Claude subscription** via the host agent's subagents. No external
-LLM API key, no Claude Agent SDK, no per-token billing. The bundled scripts are pure
-data/IO (yfinance) and contain **zero LLM calls**.
+A **multi-agent single-stock analysis pipeline, packaged as a Claude Code skill**. It
+runs as subagents *inside your Claude Code session*, so it needs **no separate LLM API
+key** and adds **no extra per-token bill on top of the Claude Code access you already
+have** — whether that access is a Pro/Max subscription or an API key. (If you're on a
+subscription, that means no extra cost at all.) No Claude Agent SDK. The bundled
+scripts are pure data/IO (yfinance) and contain **zero LLM calls** — so they're
+portable, even though the orchestration (`SKILL.md`) targets the Claude Code harness.
 
 Give it a ticker; it runs a 12-role research workflow and returns an actionable
 decision — **BUY / SELL / HOLD** with entry tranches, stop, hedge, position sizing,
@@ -25,11 +28,13 @@ research manager → trader → portfolio manager) and the role prompts are **ad
 from that project**.
 
 The difference: upstream TradingAgents runs as a Python app that calls an LLM **API
-endpoint** (metered API keys) — which is unfriendly to users on a Claude
-**subscription**. This repository re-expresses the same pipeline as a **Claude Code
-skill** that the host agent executes by spawning **subagents** (the `Agent` tool), so
-all reasoning runs on your existing Claude plan. The "run it as a Claude Code slash
-command" idea was also explored by
+endpoint** configured with its **own separate, metered API key** (OpenAI / Anthropic /
+…). If you already use Claude Code, running it means standing up and paying for a
+*second* key. This repository re-expresses the same pipeline as a **Claude Code skill**
+that the host agent executes by spawning **subagents** (the `Agent` tool), so it reuses
+your existing Claude Code session's model access instead of a second key — which, for
+subscription users, means no extra bill. The "run it as a Claude Code slash command"
+idea was also explored by
 [lucemia/trading-agents-plugin](https://github.com/lucemia/trading-agents-plugin).
 
 The data layer here is an **independent, self-contained** reimplementation on
@@ -92,7 +97,7 @@ wrap-up               assemble complete report + append decision to memory
 ### How it works (and why it stays cheap on context)
 
 - The host agent is the **orchestrator**. Each role is a **subagent** (`Agent` tool) —
-  so all the LLM work runs on your Claude subscription.
+  so all the LLM work runs on your existing Claude Code session (no separate API key).
 - **Disk-based handoff**: every subagent writes its full report to
   `RUN_DIR/reports/*.md` and returns **only a one-line status**. The orchestrator
   passes downstream subagents the **file paths** to read — never pasted report
