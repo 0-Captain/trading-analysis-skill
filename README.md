@@ -99,6 +99,10 @@ wrap-up               assemble complete report + append decision to memory
 
 - The host agent is the **orchestrator**. Each role is a **subagent** (`Agent` tool) —
   so all the LLM work runs on your existing Claude Code session (no separate API key).
+- **Self-contained skill layout**: `skills/trading-analysis/` bundles `SKILL.md` (the
+  orchestration spec), `scripts/` (pure data/IO), and `references/` — one file per role
+  holding that role's verbatim system prompt. `SKILL.md` stays lean and points at the
+  reference files; the orchestrator reads a role's prompt only when it dispatches that role.
 - **Disk-based handoff**: every subagent writes its full report to
   `RUN_DIR/reports/*.md` and returns **only a one-line status**. The orchestrator
   passes downstream subagents the **file paths** to read — never pasted report
