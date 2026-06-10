@@ -734,20 +734,39 @@ def cmd_get_news(ticker: str, start_date: str, end_date: str) -> int:
         chosen = items
     chosen = chosen[:15]
 
+    dated_chosen = [it for it in chosen if it["ts"] is not None]
+    _day = lambda t: t.date() if hasattr(t, "date") else t
+    span_lo = min((it["ts"] for it in dated_chosen), default=None)
+    span_hi = max((it["ts"] for it in dated_chosen), default=None)
+    distinct_days = len({_day(it["ts"]) for it in dated_chosen})
+    req_days = max(1, (ed - sd).days)
+
     out: list[str] = []
-    out.append(f"# News — {ticker.upper()} ({start_date} to {end_date})")
+    out.append(f"# News — {ticker.upper()}")
     out.append("")
-    if not window_filtered:
-        out.append("> Note: no headlines fell inside the requested window "
-                   "(or timestamps were unavailable); showing the most recent "
-                   "available headlines instead.")
+    out.append(f"- Requested window: {start_date} to {end_date}")
+    if span_lo is not None:
+        out.append(f"- Actually covered: {span_lo.strftime('%Y-%m-%d')} to "
+                   f"{span_hi.strftime('%Y-%m-%d')} "
+                   f"(**{len(chosen)}** headlines across {distinct_days} day(s))")
+    else:
+        out.append(f"- **{len(chosen)}** headlines (timestamps unavailable)")
+    out.append("")
+    # yfinance exposes only the latest ~10 articles, with no historical range
+    # query — so a multi-day window is usually only filled on its most recent
+    # day(s). Warn explicitly so the reader does not over-weight a thin sample.
+    thin = (span_lo is None or distinct_days <= 2
+            or (span_hi - span_lo).days < req_days // 2)
+    if thin:
+        out.append("> ⚠ yfinance provides only the latest ~10 headlines and has no "
+                   "historical range query, so older items in the requested window "
+                   "are unavailable. Treat this as a CURRENT news snapshot, not a full "
+                   f"{req_days}-day sample, and weight confidence accordingly.")
         out.append("")
     elif undated_present:
         out.append("> Note: some headlines lacked timestamps and were excluded "
                    "from the window filter.")
         out.append("")
-    out.append(f"Showing **{len(chosen)}** headlines.")
-    out.append("")
     for it in chosen:
         ds = it["ts"].strftime("%Y-%m-%d") if it["ts"] is not None else "undated"
         line = f"- **{ds}** — {it['title']} _({it['publisher']})_"
@@ -810,11 +829,25 @@ def cmd_get_global_news(curr_date: str, look_back_days: int = 7,
     out: list[str] = []
     out.append(f"# Global / Macro News — window ending {curr_date}")
     out.append("")
-    out.append(f"- Look-back: **{look_back_days}** days "
+    _gday = lambda t: t.date() if hasattr(t, "date") else t
+    g_dated = [it["ts"] for it in collected if it["ts"] is not None]
+    g_days = len({_gday(t) for t in g_dated})
+    g_lo = min(g_dated, default=None)
+    g_hi = max(g_dated, default=None)
+
+    out.append(f"- Requested look-back: **{look_back_days}** days "
                f"({window_start.strftime('%Y-%m-%d')} to {curr_date})")
+    if g_lo is not None:
+        out.append(f"- Actually covered: {g_lo.strftime('%Y-%m-%d')} to "
+                   f"{g_hi.strftime('%Y-%m-%d')} across {g_days} day(s)")
     out.append(f"- Proxies used: {', '.join(used_proxies) or 'none'}")
     out.append(f"- Showing **{len(collected)}** of up to {limit} headlines.")
     out.append("")
+    if g_lo is None or g_days <= 2:
+        out.append("> ⚠ yfinance macro headlines are latest-only (no historical "
+                   "range query), so most cluster on the final day(s). Treat as a "
+                   "current macro snapshot, not an evenly-sampled look-back window.")
+        out.append("")
     for it in collected:
         ds = it["ts"].strftime("%Y-%m-%d") if it["ts"] is not None else "undated"
         line = (f"- **{ds}** [{it['proxy']}] — {it['title']} "
