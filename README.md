@@ -52,8 +52,9 @@ The data layer here is an **independent, self-contained** reimplementation on
 /plugin install trading-analysis
 ```
 
-(Or clone the repo into `~/.claude/skills/` / a plugins dir and set
-`TRADING_ANALYSIS_SKILL_ROOT` to the repo path.)
+(Or copy the self-contained skill folder `skills/trading-analysis/` — it bundles
+`SKILL.md` + `scripts/` — into `~/.claude/skills/`, and set `TRADING_ANALYSIS_SKILL_DIR`
+to that folder.)
 
 **2. Install the data dependencies** (one-time, into whatever Python you'll point the
 skill at):
@@ -118,7 +119,7 @@ wrap-up               assemble complete report + append decision to memory
 | Variable | Purpose | Default |
 |---|---|---|
 | `CLAUDE_PLUGIN_ROOT` | Plugin root (set automatically when installed via `/plugin`) | — |
-| `TRADING_ANALYSIS_SKILL_ROOT` | Repo root, if not installed as a plugin | — |
+| `TRADING_ANALYSIS_SKILL_DIR` | The skill folder (`skills/trading-analysis`), if not installed as a plugin | — |
 | `TRADING_ANALYSIS_PYTHON` | Interpreter with the data deps | `python3` |
 | `TRADING_ANALYSIS_RUNS_DIR` | Where run artifacts are written | `~/.trading-analysis/runs` |
 | `TRADING_ANALYSIS_MEMORY` | Cross-run decision memory file | `~/.trading-analysis/memory.md` |

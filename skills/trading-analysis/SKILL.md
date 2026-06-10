@@ -56,20 +56,21 @@ allowed is the one-time validation retry on the three structured roles (Phases 4
 
 Two values are resolved once in Step 0 and reused everywhere:
 
-- **`PLUGIN_ROOT`** = `$CLAUDE_PLUGIN_ROOT` when installed as a plugin (Claude Code sets it
-  automatically). If unset (e.g. the skill was cloned into `.claude/skills/` rather than installed
-  via `/plugin`), the user exports `TRADING_ANALYSIS_SKILL_ROOT` to the repo root. There is NO
-  machine-specific fallback — Step 0 errors clearly if neither is set.
+- **`SKILL_DIR`** = this skill's own directory (it bundles `SKILL.md` + `scripts/`). When installed
+  as a plugin, it is `$CLAUDE_PLUGIN_ROOT/skills/trading-analysis` (Claude Code sets
+  `CLAUDE_PLUGIN_ROOT` automatically). If `CLAUDE_PLUGIN_ROOT` is unset (e.g. the skill folder was
+  copied into `~/.claude/skills/` on its own), the user exports `TRADING_ANALYSIS_SKILL_DIR` to the
+  skill folder. There is NO machine-specific fallback — Step 0 errors clearly if neither resolves.
 - **`TA_PY`** = a Python interpreter with the data deps (`yfinance`, `pandas`, `stockstats`)
   installed. Defaults to `python3`, overridable via `TRADING_ANALYSIS_PYTHON`. Step 0 **preflights**
   it. EVERY python call — scripts AND the `ta_data.py` calls inside subagents — uses `TA_PY`, never
   bare `python` (a system interpreter without the deps would make `ta_data.py` return no data and
   analysts would invent numbers). Always use `TA_PY`.
 
-Scripts are therefore invoked as:
+Scripts (all bundled under `SKILL_DIR/scripts/`) are therefore invoked as:
 
 ```
-"$TA_PY" "$PLUGIN_ROOT/scripts/<script>.py" <args>
+"$TA_PY" "$SKILL_DIR/scripts/<script>.py" <args>
 ```
 
 `RUN_DIR` (computed in Step 0) is:
@@ -95,11 +96,12 @@ Parse `$ARGUMENTS` as `"<TICKER> [DATE]"`:
 Then run the bootstrap script and create the run directory. Do this in Bash:
 
 ```bash
-# --- Resolve the plugin root (no machine-specific fallback) ---
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$TRADING_ANALYSIS_SKILL_ROOT}"
-if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/scripts/ta_data.py" ]; then
-  echo "PLUGIN_ROOT_UNRESOLVED: set CLAUDE_PLUGIN_ROOT (auto when installed via /plugin) or"
-  echo "export TRADING_ANALYSIS_SKILL_ROOT=/path/to/trading-analysis-skill"
+# --- Resolve this skill's own directory (no machine-specific fallback) ---
+# Plugin install: $CLAUDE_PLUGIN_ROOT/skills/trading-analysis. Bare skill copy: $TRADING_ANALYSIS_SKILL_DIR.
+SKILL_DIR="${TRADING_ANALYSIS_SKILL_DIR:-${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/skills/trading-analysis}}"
+if [ -z "$SKILL_DIR" ] || [ ! -f "$SKILL_DIR/scripts/ta_data.py" ]; then
+  echo "SKILL_DIR_UNRESOLVED: set CLAUDE_PLUGIN_ROOT (auto when installed via /plugin) or"
+  echo "export TRADING_ANALYSIS_SKILL_DIR=/path/to/skills/trading-analysis"
   exit 1
 fi
 TICKER="<TICKER>"          # from $ARGUMENTS, upper-cased
@@ -113,7 +115,7 @@ TA_PY="${TRADING_ANALYSIS_PYTHON:-python3}"
 # PREFLIGHT — fail LOUDLY instead of silently degrading to no-data.
 if ! "$TA_PY" -c "import yfinance, pandas, stockstats" >/dev/null 2>&1; then
   echo "PREFLIGHT_FAILED: '$TA_PY' is missing the data deps (yfinance, pandas, stockstats)."
-  echo "Fix: pip install -r \"$PLUGIN_ROOT/requirements.txt\"  (or set TRADING_ANALYSIS_PYTHON to an interpreter that has them)."
+  echo "Fix: pip install yfinance pandas stockstats  (or set TRADING_ANALYSIS_PYTHON to an interpreter that has them)."
   exit 1
 fi
 echo "TA_PY=$TA_PY"
@@ -124,7 +126,7 @@ if [ -f "${RUN_DIR}/reports/final_trade_decision.md" ]; then
 fi
 
 # Bootstrap context (writes RUN_DIR/state/context.json). NO LLM here.
-"$TA_PY" "${PLUGIN_ROOT}/scripts/ta_context.py" --ticker "${TICKER}" --date "${DATE}" --run-dir "${RUN_DIR}"
+"$TA_PY" "${SKILL_DIR}/scripts/ta_context.py" --ticker "${TICKER}" --date "${DATE}" --run-dir "${RUN_DIR}"
 cat "${RUN_DIR}/state/context.json"
 ```
 
@@ -163,8 +165,8 @@ For each role you spawn ONE **Agent** tool call. The Agent prompt you send must:
    - `{past_memory}` → (portfolio_manager only) the `past_memory` string from
      `context.json`.
    - `{py}` → (analysts only) the resolved `TA_PY` interpreter path from Step 0.
-   - `{plugin_root}` → (analysts only) the resolved `PLUGIN_ROOT` from Step 0.
-   Substitute `{py}` and `{plugin_root}` with their concrete absolute values before
+   - `{skill_dir}` → (analysts only) the resolved `SKILL_DIR` from Step 0.
+   Substitute `{py}` and `{skill_dir}` with their concrete absolute values before
    sending — do not leave them for the subagent's shell to expand.
 3. For roles with `reads`, give the subagent the **FILE PATHS to Read** (absolute or
    `RUN_DIR`-relative). NEVER paste report bodies into the prompt.
@@ -184,10 +186,10 @@ analyst calls ONLY its own allowed `ta_data.py` subcommands, writes its `.md`, a
 returns one line. None of them read any report (their `reads` are empty).
 
 `ta_data.py` subcommands take **POSITIONAL** args (and a few `--underscore_flags`); they are
-invoked inside the subagent via Bash as (with `{py}` / `{plugin_root}` already substituted):
+invoked inside the subagent via Bash as (with `{py}` / `{skill_dir}` already substituted):
 
 ```
-{py} "{plugin_root}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
+{py} "{skill_dir}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
 ```
 
 Per-analyst allowed subcommands (exact signatures shown in each role prompt below):
@@ -206,7 +208,7 @@ System prompt (verbatim):
 > {instrument_preamble}
 >
 > You may call ONLY these data commands (each prints markdown to stdout). Args are POSITIONAL unless shown with `--`. Invoke them via Bash exactly as:
->   {py} "{plugin_root}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
+>   {py} "{skill_dir}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
 > - get_verified_snapshot <TICKER> <DATE> [--look_back_days 30] — deterministic ground-truth snapshot: the latest verified OHLCV row on or before the trade date, common indicators, and recent closes. CALL THIS FIRST. It is the source of truth for every exact number.
 > - get_stock_data <TICKER> <START_DATE> <END_DATE> — daily OHLCV (dates YYYY-MM-DD).
 > - get_indicators <TICKER> <INDICATOR> <DATE> [--look_back_days 30] — INDICATOR is one of close_50_sma, close_200_sma, close_10_ema, macd, macds, macdh, rsi, boll, boll_ub, boll_lb, atr, vwma.
@@ -236,7 +238,7 @@ System prompt (verbatim):
 > {instrument_preamble}
 >
 > You may call ONLY this data command (it prints markdown to stdout). Args are POSITIONAL. Invoke it via Bash as:
->   {py} "{plugin_root}/scripts/ta_data.py" get_news <TICKER> <START_DATE> <END_DATE>
+>   {py} "{skill_dir}/scripts/ta_data.py" get_news <TICKER> <START_DATE> <END_DATE>
 > Pull headlines for a 7-14 day window ending at the trade date (dates YYYY-MM-DD). Read the headlines carefully and:
 > 1. Classify each headline as bullish / bearish / neutral with one-sentence reasoning.
 > 2. Identify dominant themes (e.g. earnings beat, regulatory risk, M&A rumor, analyst rating change).
@@ -262,7 +264,7 @@ System prompt (verbatim):
 > {instrument_preamble}
 >
 > You may call ONLY these data commands (each prints markdown to stdout). Args are POSITIONAL unless shown with `--`. Invoke them via Bash as:
->   {py} "{plugin_root}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
+>   {py} "{skill_dir}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
 > - get_news <TICKER> <START_DATE> <END_DATE> — ticker-specific articles.
 > - get_global_news <DATE> [--look_back_days 7] [--limit 20] — macro/sector headlines.
 > - get_insider_transactions <TICKER> — recent insider buys/sells.
@@ -292,7 +294,7 @@ System prompt (verbatim):
 > {instrument_preamble}
 >
 > You may call ONLY these data commands (each prints markdown to stdout). Args are POSITIONAL unless shown with `--`. Invoke them via Bash as:
->   {py} "{plugin_root}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
+>   {py} "{skill_dir}/scripts/ta_data.py" <subcommand> <positional-args> [--underscore_flags]
 > - get_fundamentals <TICKER> <DATE> — P/E, ROE, debt ratios, growth.
 > - get_balance_sheet <TICKER> [--freq quarterly] [--curr_date <DATE>] — assets, liabilities, equity.
 > - get_cashflow <TICKER> [--freq quarterly] [--curr_date <DATE>] — operating / investing / financing cash flows.
@@ -475,7 +477,7 @@ System prompt (verbatim):
 **Validate** (Bash, NO LLM):
 
 ```bash
-"$TA_PY" "${PLUGIN_ROOT}/scripts/ta_parse.py" research_plan "${RUN_DIR}/state/research_plan.json"
+"$TA_PY" "${SKILL_DIR}/scripts/ta_parse.py" research_plan "${RUN_DIR}/state/research_plan.json"
 ```
 
 If it exits non-zero (schema invalid / missing fields), **re-dispatch the research_manager
@@ -529,7 +531,7 @@ System prompt (verbatim):
 **Validate** (Bash, NO LLM):
 
 ```bash
-"$TA_PY" "${PLUGIN_ROOT}/scripts/ta_parse.py" trader_proposal "${RUN_DIR}/state/trader_proposal.json"
+"$TA_PY" "${SKILL_DIR}/scripts/ta_parse.py" trader_proposal "${RUN_DIR}/state/trader_proposal.json"
 ```
 
 If non-zero, **re-dispatch the trader EXACTLY ONCE** with the error appended. Validate again.
@@ -581,7 +583,7 @@ System prompt (verbatim):
 **Validate** (Bash, NO LLM):
 
 ```bash
-"$TA_PY" "${PLUGIN_ROOT}/scripts/ta_parse.py" portfolio_decision "${RUN_DIR}/state/portfolio_decision.json"
+"$TA_PY" "${SKILL_DIR}/scripts/ta_parse.py" portfolio_decision "${RUN_DIR}/state/portfolio_decision.json"
 ```
 
 If non-zero, **re-dispatch the portfolio_manager EXACTLY ONCE** with the error appended. Validate again.
@@ -596,9 +598,9 @@ it requires `--rating` plus a summary source). Then assemble the combined report
 append the decision to memory, substituting the values you just read:
 
 ```bash
-"$TA_PY" "${PLUGIN_ROOT}/scripts/ta_assemble.py" --run-dir "${RUN_DIR}"
+"$TA_PY" "${SKILL_DIR}/scripts/ta_assemble.py" --run-dir "${RUN_DIR}"
 
-"$TA_PY" "${PLUGIN_ROOT}/scripts/ta_memory.py" append \
+"$TA_PY" "${SKILL_DIR}/scripts/ta_memory.py" append \
   --ticker "${TICKER}" --date "${DATE}" \
   --rating "<rating from portfolio_decision.json>" \
   --summary-file "${RUN_DIR}/reports/final_trade_decision.md"
